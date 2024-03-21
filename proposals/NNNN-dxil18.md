@@ -74,22 +74,23 @@ DXIL 1.8 also adds new property types for Work Graph types.
 
 ### New DXIL Metadata
 
-Node shader entry metadata can contain the following tagged entries:
+The optional node shader entry point extended properties MDList may or must contain
+ the following metadata tagged entries:
 
-|                   Tag                   | Constant |          Value         |           Required?          |               Description                     |
-|-----------------------------------------|----------|------------------------|------------------------------|-----------------------------------------------|
-|kDxilNumThreadsTag                       |    4     |MDList: (i32, i32, i32) |Yes for all but thread launch | Number of threads (X,Y,Z) for node shader. |
-|kDxilNodeLaunchTypeTag                   |    13    |MDList: (i32)           |             Yes              | Launch type: broadcasting, thread, or coalescing |
-|kDxilNodeIsProgramEntryTag               |    14    |MDList: (i1)            |When receiveing outside input | Node may be invoked as an entry directly by the API |
-|kDxilNodeIdTag                           |    15    |MDList: (MDString, i32) |             No               | Node name the shader represents |
-|kDxilNodeLocalRootArgumentsTableIndexTag |    16    |MDList: (i32)           |             No               | Record index into the local root arguments |
-|kDxilShareInputOfTag                     |    17    |MDList: (MDString, i32) |             No               | Shares inputs of the named node |
-|kDxilNodeDispatchGridTag                 |    18    |MDList: (i32, i32, i32) |Yes without MaxDispatchGridTag| The size of the dispatch grid |
-|kDxilNodeMaxDispatchGridTag              |    22    |MDlist: (i32, i32, i32) |Yes without DispatchGridTag   | The max size of the dispatch grid |
-|kDxilNodeMaxRecursionDepthTag            |    19    |MDList: (i32)           |Yes when outputs to self      | Specifies the maximum node recursion depth |
-|kDxilNodeInputsTag                       |    20    |MDList: (MDList[])      |            Yes               | Lists inputs |
-|kDxilNodeOutputsTag                      |    21    |MDList: (MDList[])      |            Yes               | Lists Outputs |
-|kDxilRangedWaveSizeTag                   |    23    |MDlist: (i32, i32, i32) |            No                | Wave size range and preferred |
+|                   Tag                   | Constant |          Value         |           Required?          |               Description                           | Shader Models |
+|-----------------------------------------|----------|------------------------|------------------------------|-----------------------------------------------------|---------------|
+|kDxilNumThreadsTag                       |    4     |MDList: (i32, i32, i32) |Yes for all but thread launch | Number of threads (X,Y,Z) for node shader.          |    >= 6.0     |
+|kDxilNodeLaunchTypeTag                   |    13    |MDList: (i32)           |            Yes               | Launch type: broadcasting, thread, or coalescing    |    >= 6.8     |
+|kDxilNodeIsProgramEntryTag               |    14    |MDList: (i1)            |When receiveing outside input | Node may be invoked as an entry directly by the API |    >= 6.8     |
+|kDxilNodeIdTag                           |    15    |MDList: (MDString, i32) |            No                | Node name the shader represents                     |    >= 6.8     |
+|kDxilNodeLocalRootArgumentsTableIndexTag |    16    |MDList: (i32)           |            No                | Record index into the local root arguments          |    >= 6.8     |
+|kDxilShareInputOfTag                     |    17    |MDList: (MDString, i32) |            No                | Shares inputs of the named node                     |    >= 6.8     |
+|kDxilNodeDispatchGridTag                 |    18    |MDList: (i32, i32, i32) |Yes without MaxDispatchGridTag| The size of the dispatch grid                       |    >= 6.8     |
+|kDxilNodeMaxDispatchGridTag              |    22    |MDlist: (i32, i32, i32) |Yes without DispatchGridTag   | The max size of the dispatch grid                   |    >= 6.8     |
+|kDxilNodeMaxRecursionDepthTag            |    19    |MDList: (i32)           |Yes when outputs to self      | Specifies the maximum node recursion depth          |    >= 6.8     |
+|kDxilNodeInputsTag                       |    20    |MDList: (MDList[])      |            Yes               | List of input records                               |    >= 6.8     |
+|kDxilNodeOutputsTag                      |    21    |MDList: (MDList[])      |            Yes               | List of outputs records                             |    >= 6.8     |
+|kDxilRangedWaveSizeTag                   |    23    |MDlist: (i32, i32, i32) |            No                | Wave size range and preferred                       |    >= 6.8     |
 
 
 All entries in the table above except `kDxilNumThreadsTag` are new constants
@@ -99,15 +100,15 @@ The `kDxilNodeInputsTag` and `kDxilNodeOutputsTag` values are lists of node
 metadata entries, where each node is an MDList of sub metadata entries based on
 the following index table:
 
-|                   Tag                   |  Index   |          Value           |
-|-----------------------------------------|----------|--------------------------|
-|kDxilNodeOutputIDTag                     |    0     |MDList: (MDString, i32)   |
-|kDxilNodeIOFlagsTag                      |    1     |MDList: (i32)             |
-|kDxilNodeRecordTypeTag                   |    2     |MDList: (MDList[])        |
-|kDxilNodeMaxRecordsTag                   |    3     |MDList: (i32)             |
-|kDxilNodeMaxRecordsSharedWithTag         |    4     |MDList: (MDString, i32)   |
-|kDxilNodeOutputArraySizeTag              |    5     |MDList: (i32)             |
-|kDxilNodeAllowSparseNodesTag             |    6     |MDList: (i1)              |
+|                   Tag                   |  Index   |          Value           |    Required?    |               Description                            | Shader Models |
+|-----------------------------------------|----------|--------------------------|-----------------|------------------------------------------------------|---------------|
+|kDxilNodeOutputIDTag                     |    0     |MDList: (MDString, i32)   | No              | Name and index of the output node                    |    >= 6.8     |
+|kDxilNodeIOFlagsTag                      |    1     |MDList: (i32)             | Yes             | I/O, RW, emtpy, array, granularity, kind, etc        |    >= 6.8     |
+|kDxilNodeRecordTypeTag                   |    2     |MDList: (MDList[])        | No              | size, align, dispatch grid                           |    >= 6.8     |
+|kDxilNodeMaxRecordsTag                   |    3     |MDList: (i32)             | Yes for outputs | 
+|kDxilNodeMaxRecordsSharedWithTag         |    4     |MDList: (MDString, i32)   | No              |
+|kDxilNodeOutputArraySizeTag              |    5     |MDList: (i32)             | No              |
+|kDxilNodeAllowSparseNodesTag             |    6     |MDList: (i1)              | No              |
 
 
 `kDxilNodeRecordType` is a tagged metadata list based on the following tags:
