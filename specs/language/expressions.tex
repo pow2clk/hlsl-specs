@@ -180,9 +180,8 @@ is a member function name.
 corresponding argument. The order in which parameters are initialized is
 unspecified. \footnote{Today in DXC targeting DXIL matches the Microsoft C++ ABI
 and evaluates argument expressions right-to-left, while SPIR-V generation
-matches the Itanium ABI evaluating parameters left-to-right. There are good
-arguments for unifying these behaviors, and arguments for keeping them
-different.}
+matches the Itanium ABI evaluating parameters left-to-right. The clang compiler
+uses the left-to-right Itanium ABI approach for all targets.}
 
 \p If the function is a non-static member function the \texttt{this} argument
 shall be initialized to a reference to the object of the call as if casted by an
