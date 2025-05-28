@@ -272,15 +272,11 @@ numerical format of the matrix. Some of this information must be known at
 compile time - these are captured in template parameters - while others can be
 determined at runtime, and are therefore members of the struct.
 
-Since the `ByteAddressBuffer` and `RWByteAddressBuffer` are not convertable to
-each other, it is neccesary to use different named types for the matrix
-references. A base class, `dx::linalg::MatrixRefImpl` is used for the common
-code.
+While `dx::linalg::MatrixRef` is backed by a `ByteAddressBuffer`,
+`dx::linalg::RWMatrixRef` is backed by a `RWByteAddressBuffer`, making it
+writable and eligible as the matrix accumulation output parameter to
+`OuterProductAccumulate`.
 
-Other functions in the API are implemented in terms of
-`dx::linalg::MatrixRefImpl`. An option considered was to use a template
-parameter for the entire matrix type. However, this approach results in hard to
-understand error messages if a non-MatrixRef type is passed for that parameter.
 
 Example usage:
 
@@ -328,19 +324,19 @@ Implementation:
 namespace dx {
 namespace linalg {
 
-template <typename BufferTy, DataType DT, uint M, uint K, MatrixLayout ML,
-          bool Transpose>
-struct MatrixRefImpl {
-  BufferTy Buffer;
+template <DataType DT, uint M, uint K, MatrixLayout ML, bool Transpose = false>
+struct MatrixRef {
+  ByteAddressBuffer Buffer;
   uint StartOffset;
   uint Stride;
 };
 
 template <DataType DT, uint M, uint K, MatrixLayout ML, bool Transpose = false>
-using MatrixRef = MatrixRefImpl<ByteAddressBuffer, DT, M, K, ML, Transpose>;
-
-template <DataType DT, uint M, uint K, MatrixLayout ML, bool Transpose = false>
-using RWMatrixRef = MatrixRefImpl<RWByteAddressBuffer, DT, M, K, ML, Transpose>;
+struct RWMatrixRef {
+  RWByteAddressBuffer Buffer;
+  uint StartOffset;
+  uint Stride;
+};
 
 } // namespace linalg
 } // namespace dx
@@ -348,25 +344,19 @@ using RWMatrixRef = MatrixRefImpl<RWByteAddressBuffer, DT, M, K, ML, Transpose>;
 
 ### struct VectorRef
 
-`dx::linalg::VectorRef` and `dx::linalg::RWVectorRef` specify a reference to a
-vector in memory along with the format of each element.
-
-As with `dx::linalg::MatrixRef`, two versions are provided - one for vectors
-stored in `ByteAddressBuffer` and another for `RWByteAddressBuffer`. A base
-class, `dx::linalg::VectorRefImpl`, covers both of them.
+`dx::linalg::VectorRef` specifies a reference to a vector in memory along with
+the format of each element.
 
 Example usage:
 
 ```c++
 ByteAddressBuffer ROBuffer;
-RWByteAddressBuffer RWBuffer;
 
 void Example() {
   using namespace dx::linalg;
 
   VectorRef<DATA_TYPE_FLOAT16> VectorA = {ROBuffer, /*offset=*/128};
   VectorRef<DATA_TYPE_FLOAT32> VectorB = {ROBuffer, /*offset=*/128};
-  RWVectorRef<DATA_TYPE_SINT16> VectorC = {RWBuffer, /*offset=*/64};
 }
 ```
 
@@ -388,15 +378,10 @@ Implementation:
 namespace dx {
 namespace linalg {
 
-template <typename BufferTy, DataType DT> struct VectorRefImpl {
-  BufferTy Buffer;
+template <DataType DT> struct VectorRef {
+  ByteAddressBuffer Buffer;
   uint StartOffset;
 };
-
-template <DataType DT> using VectorRef = VectorRefImpl<ByteAddressBuffer, DT>;
-
-template <DataType DT>
-using RWVectorRef = VectorRefImpl<RWByteAddressBuffer, DT>;
 
 } // namespace linalg
 } // namespace dx
@@ -485,7 +470,7 @@ namespace dx {
 namespace linalg {
 
 template<typename TYo>
-vector<TYo, M_M> Mul(MatrixRefImpl<...> Matrix, Vector<...> InputVector);
+vector<TYo, M_M> Mul(MatrixRef<...> Matrix, Vector<...> InputVector);
 
 } // namespace linalg
 } // namespace dx
@@ -503,13 +488,10 @@ namespace dx {
 namespace linalg {
 
 template <typename OutputElTy, typename InputElTy, int InputElCount,
-          typename MatrixBufferTy, DataType InputDT, DataType MatrixDT,
-          uint MatrixM, uint MatrixK, MatrixLayout MatrixLayout,
-          bool MatrixTranspose>
+          DataType InputDT, DataType MatrixDT, uint MatrixM, uint MatrixK,
+          MatrixLayout MatrixLayout, bool MatrixTranspose>
 vector<OutputElTy, MatrixM>
-Mul(MatrixRefImpl<MatrixBufferTy, MatrixDT, MatrixM, MatrixK, MatrixLayout,
-                  MatrixTranspose>
-        Matrix,
+Mul(MatrixRef<MatrixDT, MatrixM, MatrixK, MatrixLayout, MatrixTranspose> Matrix,
     InterpretedVector<InputElTy, InputElCount, InputDT> InputVector) {
 
   vector<OutputElTy, MatrixM> OutputVector;
@@ -555,7 +537,7 @@ Conceptual API:
 
 ```c++
 template<typename TYo>
-vector<TYo, M_M> Mul(MatrixRefImpl<...> Matrix, Vector<...> InputVector, VectorRefImpl<...> BiasVector);
+vector<TYo, M_M> MulAdd(MatrixRef<...> Matrix, Vector<...> InputVector, VectorRef<...> BiasVector);
 ```
 
 See [Proposal 0029] for details of this operation.
@@ -570,16 +552,13 @@ namespace dx {
 namespace linalg {
 
 template <typename OutputElTy, typename InputElTy, int InputElCount,
-          typename MatrixBufferTy, DataType InputDT, DataType MatrixDT,
-          uint MatrixM, uint MatrixK, MatrixLayout MatrixLayout,
-          bool MatrixTranspose, typename BiasVectorBufferTy,
+          DataType InputDT, DataType MatrixDT, uint MatrixM, uint MatrixK,
+          MatrixLayout MatrixLayout, bool MatrixTranspose,
           DataType BiasVectorDT>
 vector<OutputElTy, MatrixM>
-MulAdd(MatrixRefImpl<MatrixBufferTy, MatrixDT, MatrixM, MatrixK, MatrixLayout,
-                     MatrixTranspose>
-           Matrix,
+MulAdd(MatrixRef<MatrixDT, MatrixM, MatrixK, MatrixLayout, MatrixTranspose> Matrix,
        InterpretedVector<InputElTy, InputElCount, InputDT> InputVector,
-       VectorRefImpl<BiasVectorBufferTy, BiasVectorDT> BiasVector) {
+       VectorRef<BiasVectorDT> BiasVector) {
 
   vector<OutputElTy, MatrixM> OutputVector;
 
