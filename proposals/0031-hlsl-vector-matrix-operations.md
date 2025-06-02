@@ -6,7 +6,7 @@
 
 - Proposal: [0031](0031-hlsl-vector-matrix-operations.md)
 - Author(s): [Damyan Pepper][damyanp], [Chris Bieneman][llvm-beanz],
-  [Anupama Chandrasekhar][anupamachandra]
+  [Anupama Chandrasekhar][anupamachandra], [Greg Roth][pow2clk]
 - Sponsor: [Damyan Pepper][damyanp]
 - Status: **Under Consideration**
 - Planned Version: Shader Model 6.9
@@ -20,6 +20,7 @@
 This proposes a set of HLSL APIs that enable the use of the hardware-accelerated
 vector/matrix operations described in [Proposal 0029].
 
+[Proposal 0026]: 0026-hlsl-long-vector-type.md
 [Proposal 0029]: 0029-cooperative-vector.md
 
 ## Motivation
@@ -43,9 +44,8 @@ An HLSL API needs to be defined to expose these new operations in a way that:
 
 ## Proposed solution
 
-This API will be implemented using HLSL code. The exact mechanism for getting
-this code into a developer's shader is TBD, but implementations have a few
-possible options, including:
+This API will be implemented using HLSL code. Implementations have a few
+possible options for getting this code into a developer's shader, including:
 
 - Developers must explicitly #include a header file
 - The compiler force-includes the header file
@@ -62,20 +62,20 @@ methods described in it are placed in the `dx` namespace. Within this namespace,
 a `linalg` namespace is also added to group together types and methods related
 to linear algebra.
 
-Throughout this API, template parameters are used to store values that must be
-known at compile time, while member variables or function arguments are used to
-store values that may only be determined at runtime.
+Throughout this API, template parameters are used to capture type information
+that must be known at compile time, while member variables or function arguments
+are used to store values that may only be determined at runtime.
 
 This API defines the following supporting types:
 
 - `struct dx::linalg::MatrixRef`
-  - Reference to a matrix stored in a ByteAddressBuffer.
+  - Reference to a read-only matrix stored in a ByteAddressBuffer.
 - `struct dx::linalg::RWMatrixRef`
-  - Reference to a matrix stored in a RWByteAddressBuffer.
+  - Reference to a writable matrix stored in a RWByteAddressBuffer.
 - `struct dx::linalg::VectorRef`
-  - Reference to a vector stored in a ByteAddressBuffer.
+  - Reference to a read-only vector stored in a ByteAddressBuffer.
 - `struct dx::linalg::RWVectorRef`
-  - Reference to a vector stored in a RWByteAddressBuffer.
+  - Reference to a writable vector stored in a RWByteAddressBuffer.
 - `struct dx::linalg::InterpretedVector`
   - Wrapper around a vector, allowing the elements of the vector to be
     reinterpreted in various ways.
@@ -85,27 +85,31 @@ This API defines the following supporting types:
 - `enum dx::linalg::MatrixLayout`
   - Enum describing the possible layouts for a matrix in memory.
 
-This API defines the following functions:
+This API defines the following functions with all functions and paraemeter types
+under the dx::linalg namespace:
 
-- `dx::linalg::Mul`
+- `template<typename T> T Mul(MatrixRef, InterpretedVector)`
   - Multiply a matrix in memory by a vector parameter.
-- `dx::linalg::MulAdd`
+- `template<typename T> T MulAdd(MatrixRef, InterpretedVector, VectorRef)`
   - Multiply a matrix in memory by a vector parameter, and add a vector from
     memory.
-- `dx::linalg::OuterProductAccumulate`
-  - Compute the outer product of two vectors and accumulate the result matrix
-    atomically-elementwise in memory.
-- `dx::linalg::VectorAccumulate`
-  - Accumulate elements of a vector atomically-elementwise to corresponding
-    elements in memory.
-- `dx::linalg::MakeInterpretedVector`
-  - Convenience function to construct an `InterpretedVector` inline while
-    inferring various template parameters.
+- `void OuterProductAccumulate(vector<T, M>, vector<T, N>, RWMatrixRef<...>)`
+  - Compute the outer product of two vectors and elementwise atomically adds and
+    stores it to the result matrix in memory.
+- `void VectorAccumulate(vector<T,M>, RWByteAddressBuffer, uint))`
+  - Elementwise atomically adds and stores elements of a vector to corresponding
+    elements in memory at the given offset.
+- `template<DataType DT, typename T, int N> InterprettedVector<T,N,DT> MakeInterpretedVector<vector<T,N>)`
+  - Convenience function to construct an `InterpretedVector` inline with the
+    indicated data type while inferring type and element number from the
+    provided vector.
 
-These are all described in more detail below, but the follow code example gives
-a flavor of how these work together:
+These are all described in more detail below, but the following code example
+gives a flavor of how these work together:
 
 ```c++
+#include <dx/linalg.h>
+
 ByteAddressBuffer Model;
 
 vector<float, 3> ApplyNeuralMaterial(vector<half, 8> InputVector) {
@@ -155,6 +159,7 @@ various functions defined. In this document a higher-level view of how
 developers should view each function is provided, along with a proposed
 implementation.
 
+
 ### enum DataType
 
 The `dx::linalg::DataType` enum defines the various data types that can be
@@ -166,19 +171,19 @@ namespace dx {
 namespace linalg {
 
 enum DataType {
-  DATA_TYPE_SINT16 = 2,           // ComponentType::I16
-  DATA_TYPE_UINT16 = 3,           // ComponentType::U16
-  DATA_TYPE_SINT32 = 4,           // ComponentType::I32
-  DATA_TYPE_UINT32 = 5,           // ComponentType::U32
-  DATA_TYPE_FLOAT16 = 8,          // ComponentType::F16
-  DATA_TYPE_FLOAT32 = 9,          // ComponentType::F32
-  DATA_TYPE_SINT8_T4_PACKED = 17, // ComponentType::PackedS8x32
-  DATA_TYPE_UINT8_T4_PACKED = 18, // ComponentType::PackedU8x32
-  DATA_TYPE_UINT8 = 19,           // ComponentType::U8
-  DATA_TYPE_SINT8 = 20,           // ComponentType::I8
-  DATA_TYPE_FLOAT8_E4M3 = 21,     // ComponentType::F8_E4M3
-                                  // (1 sign, 4 exp, 3 mantissa bits)
-  DATA_TYPE_FLOAT8_E5M2 = 22,     // ComponentType::F8_E5M2
+  DATA_TYPE_SINT16 = 2,           // Signed 16-bit Integer
+  DATA_TYPE_UINT16 = 3,           // Unsigned 16-bit Integer
+  DATA_TYPE_SINT32 = 4,           // Signed 32-bit Integer
+  DATA_TYPE_UINT32 = 5,           // Unsigned 32-bit Integer
+  DATA_TYPE_FLOAT16 = 8,          // 16-bit float
+  DATA_TYPE_FLOAT32 = 9,          // 32-bit float
+  DATA_TYPE_SINT8_T4_PACKED = 17, // 4 signed 8-bit integers packed in a 32 bits
+  DATA_TYPE_UINT8_T4_PACKED = 18, // 4 usigned 8-bit integers packed in a 32 bits
+  DATA_TYPE_UINT8 = 19,           // Signed 8-bit integer
+  DATA_TYPE_SINT8 = 20,           // Unsigned 8-bit integer
+  DATA_TYPE_FLOAT8_E4M3 = 21,     // 8-bit float with
+                                  // 1 sign, 4 exp, 3 mantissa bits
+  DATA_TYPE_FLOAT8_E5M2 = 22,     // 8-bit float with
                                   // (1 sign, 5 exp, 2 mantissa bits)
 };
 
@@ -186,7 +191,8 @@ enum DataType {
 } // namespace dx
 ```
 
-See the Type Interpretations section of [Proposal 0029] for more information.
+See the [Type Interpretations](0029-cooperative-vector.md#type-interpretations)
+section of [Proposal 0029] for more information.
 
 ### enum MatrixLayout
 
@@ -208,7 +214,8 @@ enum MatrixLayout {
 } // namespace dx
 ```
 
-See the Matrix Layouts section of [Proposal 0029] for more information.
+See the [Matrix Layouts](0029-cooperative-vector.md#matrix-layouts) section of
+[Proposal 0029] for more information.
 
 ### Builtins
 
@@ -217,12 +224,12 @@ no promises are made that these will continue to be available over time, this
 proposal describes an implementation in terms of builtins such as this. For
 this reason it is useful to have them described here as a reference point.
 
-Each builtin corresponds to one of the operations described in [0029].
+Each builtin corresponds to one of the operations described in [Proposal 0029].
 
 ```c++
 namespace dx {
 
-// dx.op.matvecmul
+// Mul()
 template <typename TYo, int NUMo, typename TYi, int NUMi, typename RESm>
 void __builtin_MatVecMul(out vector<TYo, NUMo> OutputVector,
                          bool IsOutputUnsigned, vector<TYi, NUMi> InputVector,
@@ -232,7 +239,7 @@ void __builtin_MatVecMul(out vector<TYo, NUMo> OutputVector,
                          uint MatrixLayout, bool IsMatrixTransposed,
                          uint MatrixStride);
 
-// dx.op.matvecmuladd
+// MulAdd()
 template <typename TYo, int NUMo, typename TYi, int NUMi, typename RESm,
           typename RESv>
 void __builtin_MatVecMulAdd(out vector<TYo, NUMo> OutputVector,
@@ -245,7 +252,7 @@ void __builtin_MatVecMulAdd(out vector<TYo, NUMo> OutputVector,
                             RESv BiasVectorResource, uint BiasVectorOffset,
                             uint BiasVectorInterpretation);
 
-// dx.op.outerproductaccumulate
+// OuterProductAccumulate()
 template <typename TY, int M, int N, typename RES>
 void __builtin_OuterProductAccumulate(vector<TY, M> InputVector1,
                                       vector<TY, N> InputVector2,
@@ -254,7 +261,7 @@ void __builtin_OuterProductAccumulate(vector<TY, M> InputVector1,
                                       uint MatrixInterpretation,
                                       uint Layout, uint MatrixStride);
 
-// dx.op.vectoraccumulate
+// VectorAccumulate()
 template <typename TY, int NUM, typename RES>
 void __builtin_VectorAccumulate(vector<TY, NUM> InputVector,
                                 RES OutputArrayResource,
@@ -263,7 +270,6 @@ void __builtin_VectorAccumulate(vector<TY, NUM> InputVector,
 } // namespace dx
 
 ```
-
 ### struct MatrixRef / RWMatrixRef
 
 `dx::linalg::MatrixRef` and `dx::linalg::RWMatrixRef` specify a reference to a
@@ -295,7 +301,7 @@ void Example() {
       {ROBuffer, /*offset=*/128, /*stride=*/0};
 
   MatrixRef<DATA_TYPE_FLOAT16, 4, 4, MATRIX_LAYOUT_ROW_MAJOR, true>
-      MatrixB = {ROBuffer, /*offset=*/128, /*stride=*/16};
+      MatrixB = {ROBuffer, /*offset=*/256, /*stride=*/16};
 
   RWMatrixRef<DATA_TYPE_FLOAT16, 128, 256, MATRIX_LAYOUT_OUTER_PRODUCT_OPTIMAL>
       MatrixC = {RWBuffer, /*offset=*/64, /*stride=*/0};
@@ -343,9 +349,11 @@ Members:
   - For `RWMatrixRef` this is a `RWByteAddresssBuffer`
 - `StartOffset` - the offset, in bytes, from the beginning of the buffer where
   the matrix is located.
-- `Stride` - the stride, in bytes, between rows or columns of the matrix. This
-  value must be zero if the matrix layout is `MATRIX_LAYOUT_MUL_OPTIMAL` or
-  `MATRIX_LAYOUT_OUTER_PRODUCT_OPTIMAL`.
+- `Stride` - the stride, in bytes, between rows or columns of the matrix
+  for row- or column-major matrices respectively. This value must be zero if the
+  matrix layout is `MATRIX_LAYOUT_MUL_OPTIMAL` or
+  `MATRIX_LAYOUT_OUTER_PRODUCT_OPTIMAL`. In these cases, the implementation will
+  determine the strides internally.
 
 ### struct VectorRef
 
@@ -366,7 +374,7 @@ void Example() {
   using namespace dx::linalg;
 
   VectorRef<DATA_TYPE_FLOAT16> VectorA = {ROBuffer, /*offset=*/128};
-  VectorRef<DATA_TYPE_FLOAT32> VectorB = {ROBuffer, /*offset=*/128};
+  VectorRef<DATA_TYPE_FLOAT32> VectorB = {ROBuffer, /*offset=*/256};
   RWVectorRef<DATA_TYPE_SINT16> VectorC = {RWBuffer, /*offset=*/64};
 }
 ```
@@ -404,26 +412,26 @@ Members:
 - `StartOffset` - the offset, in bytes, from the beginning of the buffer to
   where the vector is located.
 
-### struct InterpretedVector
+### struct InterpretedVector / Function:MakeInterpretedVector
 
 > NOTE: it's possible that one resolution of [441] may remove the need for this
 > type entirely.
 
 The `dx::linalg::InterpretedVector` struct is a wrapper around `vector`, adding
 an interpretation value that controls how the data in the vector should be
-interpreted. Although the struct can be used directly, it is likely more
+interpreted. Although the struct can be created directly, it is likely more
 ergonomic to use the `dx::linalg::MakeInterpretedVector` function that's also
 described here.
 
 Example usage:
 
 ```c++
-ByteAddressBuffer Buffer;
+ByteAddressBuffer Buf;
 void Example() {
   using namespace dx::linalg;
 
   MatrixRef<DATA_TYPE_FLOAT16, 128, 128, MATRIX_LAYOUT_MUL_OPTIMAL, true>
-      Matrix = {Buffer, 0, 0};
+      Matrix = {Buf, 0, 0};
 
   vector<float, 128> V = 0;
   vector<float, 128> Result =
@@ -434,6 +442,19 @@ void Example() {
   vector<float, 128> Result2 = Mul<float>(Matrix, IV);
 }
 ```
+
+Conceptual API:
+
+```c++
+namespace dx {
+namespace linalg {
+
+InterpretedVector<T, N, DT> MakeInterpretedVector(vector<T, N> Vec);
+
+} // namespace linalg
+} // namespace dx
+```
+
 
 Implementation:
 
@@ -455,6 +476,16 @@ InterpretedVector<T, N, DT> MakeInterpretedVector(vector<T, N> Vec) {
 } // namespace dx
 ```
 
+Template parameter:
+
+- `DT` - the interpreted data type of the vector elements.
+- `T` - the vector element inferred from the parameter.
+- `N` - the vector length inferred from the parameter.
+
+Members:
+
+- `Vec` The HLSL vector to be wrapped in the interpreted vector.
+
 [441]: https://github.com/microsoft/hlsl-specs/issues/441
 
 ### Function: Mul
@@ -462,17 +493,15 @@ InterpretedVector<T, N, DT> MakeInterpretedVector(vector<T, N> Vec) {
 The `dx::linalg::Mul` function performs a matrix-vector multiplication. The
 matrix is stored in memory, while the vector comes from a variable.
 
-> TODO: add an example for packed types, and make sure they work correctly
-
 Example:
 
 ```c++
-ByteAddressBuffer Buffer;
+ByteAddressBuffer Buf;
 float4 Example(float4 Input) {
   using namespace dx::linalg;
 
   MatrixRef<DATA_TYPE_FLOAT16, 4, 4, MATRIX_LAYOUT_MUL_OPTIMAL, true> Matrix = {
-      Buffer, 0, 0};
+      Buf, 0, 0};
 
   return Mul<float>(Matrix, MakeInterpretedVector<DATA_TYPE_FLOAT16>(Input));
 }
@@ -528,7 +557,7 @@ Mul(MatrixRefImpl<MatrixBufferTy, MatrixDT, MatrixM, MatrixK, MatrixLayout,
 } // namespace dx
 ```
 
-## Function: MulAdd
+### Function: MulAdd
 
 The `dx::linalg::MulAdd` function behaves as `dx::linalg::Mul`, but also adds a
 bias vector (loaded from memory) to the result.
@@ -536,15 +565,15 @@ bias vector (loaded from memory) to the result.
 Example:
 
 ```c++
-ByteAddressBuffer Buffer;
+ByteAddressBuffer Buf;
 
 void Example() {
   using namespace dx::linalg;
 
   MatrixRef<DATA_TYPE_FLOAT8_E4M3, 32, 8, MATRIX_LAYOUT_MUL_OPTIMAL> Matrix = {
-      Buffer, 0, 0};
+      Buf, 0, 0};
 
-  VectorRef<DATA_TYPE_FLOAT16> BiasVector = {Buffer, 1024};
+  VectorRef<DATA_TYPE_FLOAT16> BiasVector = {Buf, 1024};
 
   vector<float, 8> V = 0;
   vector<float, 32> Result = MulAdd<float>(
@@ -598,7 +627,7 @@ MulAdd(MatrixRefImpl<MatrixBufferTy, MatrixDT, MatrixM, MatrixK, MatrixLayout,
 } // namespace dx
 ```
 
-## Function: OuterProductAccumulate
+### Function: OuterProductAccumulate
 
 `dx::linalg::OuterProductAccumulate` computes the outer product between column
 vectors and an **M**x**N** matrix is accumulated component-wise atomically (with
@@ -606,7 +635,13 @@ device scope) in memory.
 
 The operation is equivalent to:
 
-> ResultMatrix += InputVector1 \* Transpose(InputVector2);
+```c++
+  ResultMatrix += mul(matrix<T,M,1>(InputVector1), matrix<T,1,N>(InputVector2));
+```
+
+Where `T` is the element type and `M`/`N` are the lengths of the input vectors.
+The result matrix will always be MxN.
+Note that the first cast is effectively a transpose of the given vector.
 
 Example:
 
@@ -646,8 +681,8 @@ Parameters:
 - `Matrix` - the destination matrix. The matrix dimensions must be MxN. The
   `Transpose` parameter for the matrix must be `false`. The `ML`  parameter
   (matrix layout) for the matrix must be
-  `dx::linalg::MatrixLayout::MATRIX_LAYOUT_OUTER_PRODUCT_OPTIMAL`. The `stride`
-  parameter must be zero (for optimal layouts).
+  `dx::linalg::MatrixLayout::MATRIX_LAYOUT_OUTER_PRODUCT_OPTIMAL`.
+  Due to the optimal layout, the `stride` parameter must be zero.
 
 Implementation:
 
@@ -674,11 +709,13 @@ Diagnostics:
 - Emit Diagnostic if MatrixLayout is not
   `dx::linalg::MatrixLayout::MATRIX_LAYOUT_OUTER_PRODUCT_OPTIMAL`.
 
-## Function: VectorAccumulate
+TODO: Add more diagnostic subsections.
 
-`dx::linalg::VectorAccumulate` accumulates the components of a vector
+### Function: VectorAccumulate
+
+`dx::linalg::VectorAccumulate` adds and stores the components of a vector
 component-wise atomically (with device scope) to the corresponding elements of
-an array in memory.
+in memory.
 
 Example:
 
@@ -726,11 +763,39 @@ void VectorAccumulate(vector<ElTy, ElCount> InputVector,
 } // namespace dx
 ```
 
+### Using 8-bit Integer Packed Types
+
+The 8-bit signed and unsigned data types represented in raw buffer memory can be
+used with the existing 8-bit types packed into a 32-bit integer. Because these
+types are aliases for 32-bit integers, standard 32-bit integer types can also be
+used with raw buffer 8-bit integers.
+
+This duality of representation means that the 8-bit buffer memory
+representations will be 4x the sizes of the HLSL vector representations.
+
+```c++
+ByteAddressBuffer Buf;
+void Example() {
+  using namespace dx::linalg;
+
+  // Matrix is 8x24. 6 * 4 is used for 24 because the packed size is 6 elsewhere.
+  MatrixRef<DATA_TYPE_UINT8, 8, 6 * 4, MATRIX_LAYOUT_ROW_MAJOR> Matrix = {
+      Buf, /*offset*/0, /*stride*/6 * 4};
+
+  // 8-bit integers can only be represented as packed in standard HLSL vectors.
+  vector<int8_t4_packed, 6> V = 0;
+
+  // Note that 8 32-bit integers are returned rather than packed uint8s.
+  vector<int, 8> Mul<int>(Matrix,
+                    MakeInterpretedVector<DATA_TYPE_UINT8_T4_PACKED>(V));
+}
+```
+
 ## Alternatives considered (Optional)
 
 TBD
 
-## Acknowledgments (Optional)
+## Acknowledgments
 
 We would like to thank Jeff Bolz for his contribution to this spec.
 
