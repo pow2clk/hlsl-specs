@@ -155,60 +155,6 @@ various functions defined. In this document a higher-level view of how
 developers should view each function is provided, along with a proposed
 implementation.
 
-### Builtins
-
-Although these "builtins" are not intended to be part of the HLSL language, and
-no promises are made that these will continue to be available over time, this
-proposal describes an implementation in terms of builtins such as this. For
-this reason it is useful to have them described here as a reference point.
-
-Each builtin corresponds to one of the operations described in [0029].
-
-```c++
-namespace dx {
-
-// dx.op.matvecmul
-template <typename TYo, int NUMo, typename TYi, int NUMi, typename RESm>
-void __builtin_MatVecMul(out vector<TYo, NUMo> OutputVector,
-                         bool IsOutputUnsigned, vector<TYi, NUMi> InputVector,
-                         bool IsInputUnsigned, uint InputVectorInterpretation,
-                         RESm MatrixResource, uint MatrixStartOffset,
-                         uint MatrixInterpretation, uint M, uint K,
-                         uint MatrixLayout, bool IsMatrixTransposed,
-                         uint MatrixStride);
-
-// dx.op.matvecmuladd
-template <typename TYo, int NUMo, typename TYi, int NUMi, typename RESm,
-          typename RESv>
-void __builtin_MatVecMulAdd(out vector<TYo, NUMo> OutputVector,
-                            bool IsOutputUnsigned,
-                            vector<TYi, NUMi> InputVector, bool IsInputUnsigned,
-                            uint InputVectorInterpretation, RESm MatrixResource,
-                            uint MatrixStartOffset, uint MatrixInterpretation,
-                            uint M, uint K, uint MatrixLayout,
-                            bool IsMatrixTransposed, uint MatrixStride,
-                            RESv BiasVectorResource, uint BiasVectorOffset,
-                            uint BiasVectorInterpretation);
-
-// dx.op.outerproductaccumulate
-template <typename TY, int M, int N, typename RES>
-void __builtin_OuterProductAccumulate(vector<TY, M> InputVector1,
-                                      vector<TY, N> InputVector2,
-                                      RES MatrixResource,
-                                      uint MatrixStartOffset,
-                                      uint MatrixInterpretation,
-                                      uint Layout, uint MatrixStride);
-
-// dx.op.vectoraccumulate
-template <typename TY, int NUM, typename RES>
-void __builtin_VectorAccumulate(vector<TY, NUM> InputVector,
-                                RES OutputArrayResource,
-                                uint OutputArrayOffset);
-
-} // namespace dx
-
-```
-
 ### enum DataType
 
 The `dx::linalg::DataType` enum defines the various data types that can be
@@ -264,6 +210,60 @@ enum MatrixLayout {
 
 See the Matrix Layouts section of [Proposal 0029] for more information.
 
+### Builtins
+
+Although these "builtins" are not intended to be part of the HLSL language, and
+no promises are made that these will continue to be available over time, this
+proposal describes an implementation in terms of builtins such as this. For
+this reason it is useful to have them described here as a reference point.
+
+Each builtin corresponds to one of the operations described in [0029].
+
+```c++
+namespace dx {
+
+// dx.op.matvecmul
+template <typename TYo, int NUMo, typename TYi, int NUMi, typename RESm>
+void __builtin_MatVecMul(out vector<TYo, NUMo> OutputVector,
+                         bool IsOutputUnsigned, vector<TYi, NUMi> InputVector,
+                         bool IsInputUnsigned, uint InputVectorInterpretation,
+                         RESm MatrixResource, uint MatrixStartOffset,
+                         uint MatrixInterpretation, uint M, uint K,
+                         uint MatrixLayout, bool IsMatrixTransposed,
+                         uint MatrixStride);
+
+// dx.op.matvecmuladd
+template <typename TYo, int NUMo, typename TYi, int NUMi, typename RESm,
+          typename RESv>
+void __builtin_MatVecMulAdd(out vector<TYo, NUMo> OutputVector,
+                            bool IsOutputUnsigned,
+                            vector<TYi, NUMi> InputVector, bool IsInputUnsigned,
+                            uint InputVectorInterpretation, RESm MatrixResource,
+                            uint MatrixStartOffset, uint MatrixInterpretation,
+                            uint M, uint K, uint MatrixLayout,
+                            bool IsMatrixTransposed, uint MatrixStride,
+                            RESv BiasVectorResource, uint BiasVectorOffset,
+                            uint BiasVectorInterpretation);
+
+// dx.op.outerproductaccumulate
+template <typename TY, int M, int N, typename RES>
+void __builtin_OuterProductAccumulate(vector<TY, M> InputVector1,
+                                      vector<TY, N> InputVector2,
+                                      RES MatrixResource,
+                                      uint MatrixStartOffset,
+                                      uint MatrixInterpretation,
+                                      uint Layout, uint MatrixStride);
+
+// dx.op.vectoraccumulate
+template <typename TY, int NUM, typename RES>
+void __builtin_VectorAccumulate(vector<TY, NUM> InputVector,
+                                RES OutputArrayResource,
+                                uint OutputArrayOffset);
+
+} // namespace dx
+
+```
+
 ### struct MatrixRef / RWMatrixRef
 
 `dx::linalg::MatrixRef` and `dx::linalg::RWMatrixRef` specify a reference to a
@@ -302,26 +302,6 @@ void Example() {
 }
 ```
 
-Template parameters:
-
-- `DT` - the type used to store elements of the matrix in memory
-- `M` - the 'M' dimension of the matrix
-- `K` - the 'K" dimension of the matrix
-- `ML` - the layout of the matrix in memory
-- `Transpose` - whether or not this matrix should be transposed before any
-  operations
-
-Members:
-
-- `Buffer` - the buffer that the matrix is stored in
-  - For `MatrixRef` this is a `ByteAddressBuffer`
-  - For `RWMatrixRef` this is a `RWByteAddresssBuffer`
-- `StartOffset` - the offset, in bytes, from the beginning of the buffer where
-  the matrix is located.
-- `Stride` - the stride, in bytes, between rows or columns of the matrix. This
-  value must be zero if the matrix layout is `MATRIX_LAYOUT_MUL_OPTIMAL` or
-  `MATRIX_LAYOUT_OUTER_PRODUCT_OPTIMAL`.
-
 Implementation:
 
 ```c++
@@ -345,6 +325,27 @@ using RWMatrixRef = MatrixRefImpl<RWByteAddressBuffer, DT, M, K, ML, Transpose>;
 } // namespace linalg
 } // namespace dx
 ```
+
+
+Template parameters:
+
+- `DT` - the type used to store elements of the matrix in memory
+- `M` - the 'M' dimension of the matrix
+- `K` - the 'K" dimension of the matrix
+- `ML` - the layout of the matrix in memory
+- `Transpose` - whether or not this matrix should be transposed before any
+  operations
+
+Members:
+
+- `Buffer` - the buffer that the matrix is stored in
+  - For `MatrixRef` this is a `ByteAddressBuffer`
+  - For `RWMatrixRef` this is a `RWByteAddresssBuffer`
+- `StartOffset` - the offset, in bytes, from the beginning of the buffer where
+  the matrix is located.
+- `Stride` - the stride, in bytes, between rows or columns of the matrix. This
+  value must be zero if the matrix layout is `MATRIX_LAYOUT_MUL_OPTIMAL` or
+  `MATRIX_LAYOUT_OUTER_PRODUCT_OPTIMAL`.
 
 ### struct VectorRef
 
@@ -370,18 +371,6 @@ void Example() {
 }
 ```
 
-Template parameter:
-
-- `DT` - the data type of each element stored in the buffer
-
-Members:
-
-- `Buffer` - the buffer that the vector is stored in
-  - For `VectorRef` this is a `ByteAddressBuffer`
-  - For `RWVectorRef` this is a `RWByteAddresssBuffer`
-- `StartOffset` - the offset, in bytes, from the beginning of the buffer to
-  where the vector is located.
-
 Implementation:
 
 ```c++
@@ -402,6 +391,18 @@ using RWVectorRef = VectorRefImpl<RWByteAddressBuffer, DT>;
 } // namespace dx
 
 ```
+
+Template parameter:
+
+- `DT` - the data type of each element stored in the buffer
+
+Members:
+
+- `Buffer` - the buffer that the vector is stored in
+  - For `VectorRef` this is a `ByteAddressBuffer`
+  - For `RWVectorRef` this is a `RWByteAddresssBuffer`
+- `StartOffset` - the offset, in bytes, from the beginning of the buffer to
+  where the vector is located.
 
 ### struct InterpretedVector
 
