@@ -588,12 +588,14 @@ namespace.
 namespace __detail {
 template <ComponentEnum T> struct ComponentTypeTraits {
   using Type = uint;
+  static const bool IsNativeScalar = false;
   static const uint ElementsPerScalar = 4;
 };
 
 #define __MATRIX_SCALAR_COMPONENT_MAPPING(enum_val, type)                      \
   template <> struct ComponentTypeTraits<enum_val> {                           \
     using Type = type;                                                         \
+    static const bool IsNativeScalar = true;                                   \
     static const uint ElementsPerScalar = 1;                                   \
   };
 
@@ -1535,13 +1537,16 @@ using MatrixLayoutEnum = MatrixLayout::MatrixLayoutEnum;
 namespace __detail {
 template <ComponentEnum T> struct ComponentTypeTraits {
   using Type = uint;
+  static const bool IsNativeScalar = false;
   static const uint ElementsPerScalar = 4;
 };
 
 #define __MATRIX_SCALAR_COMPONENT_MAPPING(enum_val, type)                      \
   template <> struct ComponentTypeTraits<enum_val> {                           \
     using Type = type;                                                         \
+    static const bool IsNativeScalar = true;                                   \
     static const uint ElementsPerScalar = 1;                                   \
+
   };
 
 #if __HLSL_ENABLE_16_BIT
