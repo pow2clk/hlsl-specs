@@ -59,14 +59,14 @@ template <ComponentEnum ElementType, uint DimA> struct VectorRef {
   uint Offset;
 };
 
-template <typename T, int N, ComponentEnum DT> struct InterpretedVector {
+template <typename ElTy, int N, ComponentEnum DT> struct InterpretedVector {
   vector<T, N> Data;
   static const ComponentEnum Interpretation = DT;
   static const SIZE_TYPE Size =
       __detail::ComponentTypeTraits<DT>::ElementsPerScalar * N;
 };
 
-template <ComponentEnum DT, typename T, int N>
+template <ComponentEnum DT, typename ElTy, int N>
 InterpretedVector<T, N, DT> MakeInterpretedVector(vector<T, N> Vec) {
   InterpretedVector<T, N, DT> IV = {Vec};
   return IV;
@@ -85,7 +85,7 @@ class Matrix {
             bool Transpose = false>
   Matrix<NewCompTy, M, N, NewUse, Scope> Cast();
 
-  template <typename T>
+  template <typename ElTy>
   static typename hlsl::enable_if<hlsl::is_arithmetic<T>::value, Matrix>::type
   Splat(T Val);
 
@@ -95,7 +95,7 @@ class Matrix {
   static Matrix Load(RWByteAddressBuffer Res, uint StartOffset, uint Stride,
                      MatrixLayoutEnum Layout, uint Align = sizeof(ElementType));
 
-  template <typename T>
+  template <typename ElTy>
   static typename hlsl::enable_if<hlsl::is_arithmetic<T>::value, Matrix>::type
   Load(/*groupshared*/ T Arr[], uint StartIdx, uint Stride,
        MatrixLayoutEnum Layout);
@@ -111,7 +111,7 @@ class Matrix {
   void Store(RWByteAddressBuffer Res, uint StartOffset, uint Stride,
              MatrixLayoutEnum Layout, uint Align = sizeof(ElementType));
 
-  template <typename T, SIZE_TYPE Size>
+  template <typename ElTy, SIZE_TYPE Size>
   typename hlsl::enable_if<hlsl::is_arithmetic<T>::value &&
                                (M * N / ElementsPerScalar >= Size),
                            void>::type
@@ -126,7 +126,7 @@ class Matrix {
                         MatrixLayoutEnum Layout,
                         uint Align = sizeof(ElementType));
 
-  template <typename T, MatrixUseEnum UseLocal = Use>
+  template <typename ElTy, MatrixUseEnum UseLocal = Use>
   typename hlsl::enable_if<hlsl::is_arithmetic<T>::value &&
                                Use == MatrixUse::Accumulator && UseLocal == Use,
                            void>::type
@@ -538,9 +538,9 @@ using MatrixLayoutEnum = MatrixLayout::MatrixLayoutEnum;
 
 ```c++
 namespace hlsl {
-template <bool B, typename T> struct enable_if {};
+template <bool B, typename Ty> struct enable_if {};
 
-template <typename T> struct enable_if<true, T> {
+template <typename Ty> struct enable_if<true, T> {
   using type = T;
 };
 
@@ -555,7 +555,7 @@ works just like `std::enable_if` in C++.
 ```c++
 namespace hlsl {
 
-template <typename T> struct is_arithmetic {
+template <typename Ty> struct is_arithmetic {
   static const bool value = false;
 };
 
@@ -634,7 +634,7 @@ Must be called from uniform control flow on scope-uniform matrices.
 
 
 ```c++
-template <typename T>
+template <typename ElTy>
 static typename hlsl::enable_if<hlsl::is_arithmetic<T>::value, Matrix>::type
 Matrix::Splat(T Val);
 ```
@@ -661,7 +661,7 @@ static Matrix Matrix::Load(RWByteAddressBuffer Res, uint StartOffset,
                            uint Align = sizeof(ElementType));
 
 // Not available on Thread scope matrices.
-template <typename T>
+template <typename ElTy>
 static typename hlsl::enable_if<hlsl::is_arithmetic<T>::value, Matrix>::type
 Matrix::Load(/*groupshared*/ T Arr[], uint StartIdx, uint Stride,
              MatrixLayoutEnum Layout);
@@ -764,7 +764,7 @@ void Matrix::Store(
     RWByteAddressBuffer Res, uint StartOffset, uint Stride, MatrixLayout Layout,
     uint Align = sizeof(__detail::ComponentTypeTraits<ComponentTy>::Type));
 
-template <typename T, SIZE_TYPE Size>
+template <typename ElTy, SIZE_TYPE Size>
 typename hlsl::enable_if<hlsl::is_arithmetic<T>::value &&
                              (M * N / ElementsPerScalar >= Size),
                          void>::type
@@ -804,7 +804,7 @@ Matrix::InterlockedAccumulate(RWByteAddressBuffer Res, uint StartOffset,
                               uint Stride, MatrixLayoutEnum Layout,
                               uint Align = sizeof(ElementType));
 
-template <typename T, MatrixUseEnum UseLocal = Use>
+template <typename ElTy, MatrixUseEnum UseLocal = Use>
 typename hlsl::enable_if<hlsl::is_arithmetic<T>::value &&
                              Use == MatrixUse::Accumulator && UseLocal == Use,
                          void>::type
@@ -1449,7 +1449,7 @@ namespace hlsl {
 #define SIZE_TYPE uint
 #endif
 
-template <typename T> struct is_arithmetic {
+template <typename Ty> struct is_arithmetic {
   static const bool value = false;
 };
 
@@ -1470,9 +1470,9 @@ __ARITHMETIC_TYPE(half)
 __ARITHMETIC_TYPE(float)
 __ARITHMETIC_TYPE(double)
 
-template <bool B, typename T> struct enable_if {};
+template <bool B, typename Ty> struct enable_if {};
 
-template <typename T> struct enable_if<true, T> {
+template <typename Ty> struct enable_if<true, T> {
   using type = T;
 };
 
@@ -1564,14 +1564,14 @@ template <ComponentEnum ElementType, uint DimA> struct VectorRef {
   uint Offset;
 };
 
-template <typename T, int N, ComponentEnum DT> struct InterpretedVector {
+template <typename ElTy, int N, ComponentEnum DT> struct InterpretedVector {
   vector<T, N> Data;
   static const ComponentEnum Interpretation = DT;
   static const SIZE_TYPE Size =
       __detail::ComponentTypeTraits<DT>::ElementsPerScalar * N;
 };
 
-template <ComponentEnum DT, typename T, int N>
+template <ComponentEnum DT, typename ElTy, int N>
 InterpretedVector<T, N, DT> MakeInterpretedVector(vector<T, N> Vec) {
   InterpretedVector<T, N, DT> IV = {Vec};
   return IV;
@@ -1590,7 +1590,7 @@ class Matrix {
             bool Transpose = false>
   Matrix<NewCompTy, M, N, NewUse, Scope> Cast();
 
-  template <typename T>
+  template <typename ElTy>
   static typename hlsl::enable_if<hlsl::is_arithmetic<T>::value, Matrix>::type
   Splat(T Val);
 
@@ -1600,7 +1600,7 @@ class Matrix {
   static Matrix Load(RWByteAddressBuffer Res, uint StartOffset, uint Stride,
                      MatrixLayoutEnum Layout, uint Align = sizeof(ElementType));
 
-  template <typename T>
+  template <typename ElTy>
   static typename hlsl::enable_if<hlsl::is_arithmetic<T>::value, Matrix>::type
   Load(/*groupshared*/ T Arr[], uint StartIdx, uint Stride,
        MatrixLayoutEnum Layout);
@@ -1616,7 +1616,7 @@ class Matrix {
   void Store(RWByteAddressBuffer Res, uint StartOffset, uint Stride,
              MatrixLayoutEnum Layout, uint Align = sizeof(ElementType));
 
-  template <typename T, SIZE_TYPE Size>
+  template <typename ElTy, SIZE_TYPE Size>
   typename hlsl::enable_if<hlsl::is_arithmetic<T>::value &&
                                (M * N / ElementsPerScalar >= Size),
                            void>::type
@@ -1631,7 +1631,7 @@ class Matrix {
                         MatrixLayoutEnum Layout,
                         uint Align = sizeof(ElementType));
 
-  template <typename T, MatrixUseEnum UseLocal = Use>
+  template <typename ElTy, MatrixUseEnum UseLocal = Use>
   typename hlsl::enable_if<hlsl::is_arithmetic<T>::value &&
                                Use == MatrixUse::Accumulator && UseLocal == Use,
                            void>::type
